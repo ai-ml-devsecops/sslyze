@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from enum import Enum
 
 from nassl.base_ssl_client import ClientCertificateRequested
+from nassl.ephemeral_key_info import OpenSslGroupNameEnum
 from nassl.openssl_4_0_0.ssl_client import SslClient_OpenSSL_4_0_0
 
 from sslyze.connection_helpers.tls_connection import OpenSslVersionEnum
@@ -18,14 +18,6 @@ from sslyze.plugins.plugin_base import (
     ScanJobResult,
 )
 from sslyze.server_connectivity import ServerConnectivityInfo, TlsVersionEnum
-
-
-class PqGroup(str, Enum):
-    """An ML-KEM hybrid key exchange group that can be offered in TLS 1.3."""
-
-    X25519MLKEM768 = "X25519MLKEM768"
-    SECP256R1MLKEM768 = "SecP256r1MLKEM768"
-    SECP384R1MLKEM1024 = "SecP384r1MLKEM1024"
 
 
 @dataclass(frozen=True)
@@ -113,7 +105,15 @@ class PqKeyExchangeImplementation(ScanCommandImplementation[PqKeyExchangeScanRes
             # Nothing to test: the server doesn't support TLS 1.3
             return [ScanJob(function_to_call=_raise_tls13_not_supported, function_arguments=[])]
 
-        return [ScanJob(function_to_call=_test_pq_group, function_arguments=[server_info, group]) for group in PqGroup]
+        all_pq_groups = [
+            OpenSslGroupNameEnum.SecP256r1MLKEM768,
+            OpenSslGroupNameEnum.X25519MLKEM768,
+            OpenSslGroupNameEnum.SecP384r1MLKEM1024,
+            OpenSslGroupNameEnum.curveSM2MLKEM768,
+        ]
+        return [
+            ScanJob(function_to_call=_test_pq_group, function_arguments=[server_info, group]) for group in all_pq_groups
+        ]
 
     @classmethod
     def result_for_completed_scan_jobs(
@@ -153,11 +153,11 @@ def _raise_tls13_not_supported() -> None:
 
 @dataclass(frozen=True)
 class _PqGroupResult:
-    group: PqGroup
+    group: OpenSslGroupNameEnum
     was_accepted_by_server: bool
 
 
-def _test_pq_group(server_info: ServerConnectivityInfo, pq_group: PqGroup) -> _PqGroupResult:
+def _test_pq_group(server_info: ServerConnectivityInfo, pq_group: OpenSslGroupNameEnum) -> _PqGroupResult:
     ssl_connection = server_info.get_preconfigured_tls_connection(
         override_tls_version=TlsVersionEnum.TLS_1_3,
         # Only the 4.0.0 client has support for the PQ groups
@@ -165,7 +165,7 @@ def _test_pq_group(server_info: ServerConnectivityInfo, pq_group: PqGroup) -> _P
     )
     assert isinstance(ssl_connection.ssl_client, SslClient_OpenSSL_4_0_0), "Should never happen"
 
-    ssl_connection.ssl_client.set_groups_list(pq_group.value)
+    ssl_connection.ssl_client.set_groups_list([pq_group])
 
     negotiated_group: str | None = None
     try:
@@ -181,9 +181,9 @@ def _test_pq_group(server_info: ServerConnectivityInfo, pq_group: PqGroup) -> _P
     finally:
         ssl_connection.close()
 
-    if negotiated_group and negotiated_group != pq_group.value:
-        raise RuntimeError(
-            f"Should never happen: negotiated group should be {pq_group.value} but got {negotiated_group}"
+    if negotiated_group:
+        assert negotiated_group == pq_group, (
+            f"Should never happen: group should be {pq_group} but got {negotiated_group}"
         )
 
     return _PqGroupResult(group=pq_group, was_accepted_by_server=negotiated_group is not None)

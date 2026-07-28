@@ -3,9 +3,9 @@ from operator import attrgetter
 from typing import Any
 
 from nassl.base_ssl_client import ClientCertificateRequested
-from nassl.ephemeral_key_info import _OPENSSL_NID_TO_SECG_ANSI_X9_62, EcDhEphemeralKeyInfo, OpenSslEcNidEnum
+from nassl.ephemeral_key_info import EcDhEphemeralKeyInfo, OpenSslGroupNameEnum
 from nassl.errors import OpenSSLError
-from nassl.openssl_1_1_1.ssl_client import SslClient_OpenSSL_1_1_1
+from nassl.openssl_4_0_0.ssl_client import SslClient_OpenSSL_4_0_0
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from sslyze.connection_helpers.tls_connection import OpenSslVersionEnum
@@ -33,7 +33,7 @@ class EllipticCurve:
     """
 
     name: str
-    openssl_nid: int
+    openssl_nid: int  # TODO Remove ?
 
 
 @dataclass(frozen=True)
@@ -119,10 +119,8 @@ class _SupportedEllipticCurvesCliConnector(ScanCommandCliConnector[SupportedElli
                 cls._format_subtitle("The server does not support cipher suites with ECDH key exchanges.")
             )
         else:
-            if result.supported_curves is None:
-                raise RuntimeError("Should never happen")
-            if result.rejected_curves is None:
-                raise RuntimeError("Should never happen")
+            assert result.supported_curves is not None, "Should never happen"
+            assert result.rejected_curves is not None, "Should never happen"
 
             supported_curves_names = [curve.name for curve in result.supported_curves]
             rejected_curves_names = [curve.name for curve in result.rejected_curves]
@@ -131,7 +129,21 @@ class _SupportedEllipticCurvesCliConnector(ScanCommandCliConnector[SupportedElli
         return result_as_txt
 
 
-# TODO: Test if OpenSSL 4.0 has new curves
+# TODO: Combine as a group plugin with PQ and FFDHE ? but separate curves vs PQ vs other in the CLI and JSON output ?
+"""
+Supported Groups:
+ * TLS 1.3 Groups
+    * Accepted Elliptic curve groups: <>
+    * Accepted Post-Quantum key exchange groups: <>
+    * Accepted Finite field groups: <>
+    * Rejected groups: <>
+  * TLS 1.2 Groups
+    * Accepted elliptic curve groups: <>
+    * Accepted fffdhe groups: <>
+    * Rejected groups: <>
+"""
+
+
 class SupportedEllipticCurvesImplementation(ScanCommandImplementation[SupportedEllipticCurvesScanResult, None]):
     """Test a server for supported elliptic curves."""
 
@@ -148,11 +160,12 @@ class SupportedEllipticCurvesImplementation(ScanCommandImplementation[SupportedE
             # Nothing to test: the server doesn't support EC key exchange
             return [ScanJob(function_to_call=_raise_elliptic_curve_not_supported, function_arguments=[])]
 
-        # List of curves are in https://tools.ietf.org/html/rfc4492#section-5.1.1 and
-        # https://tools.ietf.org/html/rfc8446#section-4.2.7
+        # TODO test all tls versions
+        tls_version = server_info.tls_probing_result.highest_tls_version_supported
+
         return [
-            ScanJob(function_to_call=_test_curve, function_arguments=[server_info, curve_nid])
-            for curve_nid in OpenSslEcNidEnum.get_supported_by_ssl_client()
+            ScanJob(function_to_call=_test_curve, function_arguments=[server_info, curve_group])
+            for curve_group in OpenSslGroupNameEnum.get_supported_by_tls_version(tls_version)
         ]
 
     @classmethod
@@ -199,27 +212,28 @@ class _EllipticCurveResult:
     was_accepted_by_server: bool
 
 
-def _test_curve(server_info: ServerConnectivityInfo, curve_nid: OpenSslEcNidEnum) -> _EllipticCurveResult:
-    if not server_info.tls_probing_result.supports_ecdh_key_exchange:
-        raise RuntimeError("Should never happen")
+def _test_curve(server_info: ServerConnectivityInfo, curve_group: OpenSslGroupNameEnum) -> _EllipticCurveResult:
+    assert server_info.tls_probing_result.supports_ecdh_key_exchange, "Should never happen"
 
     tls_version = server_info.tls_probing_result.highest_tls_version_supported
     ssl_connection = server_info.get_preconfigured_tls_connection(
-        override_tls_version=tls_version, openssl_version=OpenSslVersionEnum.OPENSSL_1_1_1
+        override_tls_version=tls_version, openssl_version=OpenSslVersionEnum.OPENSSL_4_0_0
     )
-    assert isinstance(ssl_connection.ssl_client, SslClient_OpenSSL_1_1_1), "Should never happen"
+    assert isinstance(ssl_connection.ssl_client, SslClient_OpenSSL_4_0_0), "Should never happen"
 
     # Set curve to test whether it is supported by the server
     enable_ecdh_cipher_suites(tls_version, ssl_connection.ssl_client)
-    ssl_connection.ssl_client.set_groups([curve_nid])
+    ssl_connection.ssl_client.set_groups_list([curve_group])
 
     try:
         ssl_connection.connect()
         negotiated_ephemeral_key = ssl_connection.ssl_client.get_ephemeral_key()
+        negotiated_group = ssl_connection.ssl_client.get_group_name()
 
     # Error handling here mis similar to test_cipher_suite.py
     except ClientCertificateRequested:
         negotiated_ephemeral_key = ssl_connection.ssl_client.get_ephemeral_key()
+        negotiated_group = ssl_connection.ssl_client.get_group_name()
 
     except (TlsHandshakeTimedOut, ServerRejectedTlsHandshake):
         negotiated_ephemeral_key = None
@@ -242,20 +256,15 @@ def _test_curve(server_info: ServerConnectivityInfo, curve_nid: OpenSslEcNidEnum
     finally:
         ssl_connection.close()
 
-        # If no error occurred check if the curve was really used
-        try:
-            curve_name = _OPENSSL_NID_TO_SECG_ANSI_X9_62[curve_nid]  # TODO(AD): Make this public in nassl
-        except KeyError:
-            curve_name = f"unknown-curve-with-openssl-id-{curve_nid.value}"
-
     if negotiated_ephemeral_key and isinstance(negotiated_ephemeral_key, EcDhEphemeralKeyInfo):
-        assert negotiated_ephemeral_key.curve == curve_nid, "Should never happen"
+        assert negotiated_group == curve_group, "Should never happen"
+        assert negotiated_ephemeral_key.curve_name == curve_group, "Should never happen"
         return _EllipticCurveResult(
-            curve=EllipticCurve(name=curve_name, openssl_nid=curve_nid.value),
+            curve=EllipticCurve(name=negotiated_ephemeral_key.curve_name, openssl_nid=negotiated_ephemeral_key.curve),
             was_accepted_by_server=True,
         )
 
     return _EllipticCurveResult(
-        curve=EllipticCurve(name=curve_name, openssl_nid=curve_nid.value),
+        curve=EllipticCurve(name=curve_group, openssl_nid=12),  # TODO
         was_accepted_by_server=False,
     )

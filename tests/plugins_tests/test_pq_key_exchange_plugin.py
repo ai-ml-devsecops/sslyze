@@ -1,6 +1,7 @@
+from nassl.ephemeral_key_info import OpenSslGroupNameEnum
+
 from sslyze import ServerNetworkLocation
 from sslyze.plugins.pq_key_exchange_plugin import (
-    PqGroup,
     PqKeyExchangeImplementation,
     PqKeyExchangeScanResult,
     PqKeyExchangeScanResultAsJson,
@@ -24,16 +25,16 @@ class TestPqKeyExchangePluginWithOnlineServer:
         # And the server is reported as PQ-ready
         assert result.supports_pq_key_exchange
         assert result.supported_pq_groups is not None
-        assert PqGroup.X25519MLKEM768.value in result.supported_pq_groups
+        assert OpenSslGroupNameEnum.X25519MLKEM768.value in result.supported_pq_groups
 
         # And a CLI output can be generated
         cli_output = PqKeyExchangeImplementation.cli_connector_cls.result_to_console_output(result)
         assert cli_output
-        assert any(PqGroup.X25519MLKEM768.value in line for line in cli_output)
+        assert any(OpenSslGroupNameEnum.X25519MLKEM768 in line for line in cli_output)
 
         # And the result can be converted to JSON and back
         result_as_json_str = PqKeyExchangeScanResultAsJson.model_validate(result).model_dump_json()
-        assert PqGroup.X25519MLKEM768.value in result_as_json_str
+        assert OpenSslGroupNameEnum.X25519MLKEM768 in result_as_json_str
 
 
 class TestPqKeyExchangePluginTls13NotSupported:
