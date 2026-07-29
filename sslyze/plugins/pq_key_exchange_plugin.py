@@ -21,6 +21,37 @@ from sslyze.server_connectivity import ServerConnectivityInfo, TlsVersionEnum
 
 
 @dataclass(frozen=True)
+class SupportedGroupsScanResult(ScanCommandResult):
+    """The result of testing a server for Supported Groups.
+
+    Attributes:
+        supported_pq_groups: The list of ML-KEM hybrid groups accepted by the server, or None if the
+                server does not support TLS 1.3 (PQ groups require TLS 1.3). An empty list means TLS 1.3 is supported but no PQ hybrid groups were accepted.
+        rejected_pq_groups: The list of ML-KEM hybrid groups rejected by the server, or None if the
+                server does not support TLS 1.3 (PQ groups require TLS 1.3).
+        supports_pq_key_exchange: True if the server accepted at least one PQ/hybrid group.
+    """
+    # TLS 1.2 or 1.3
+    supported_elliptic_curve_groups: list[str] | None
+    rejected_elliptic_curve_groups: list[str] | None  # TODO brainpool
+
+    supported_finite_field_dh_groups: list[str]
+    rejected_finite_field_dh_groups: list[str]
+
+    supported_tls_1_3_post_quantum_ml_kem_groups: list[str] | None
+    rejected_tls_1_3_post_quantum_ml_kem_groups: list[str] | None
+    supports_post_quantum_key_agreement: bool
+
+    def __post_init__(self) -> None:
+        # Sort the groups by name
+        if self.supported_pq_groups:
+            self.supported_pq_groups.sort()
+        if self.rejected_pq_groups:
+            self.rejected_pq_groups.sort()
+
+
+
+@dataclass(frozen=True)
 class PqKeyExchangeScanResult(ScanCommandResult):
     """The result of testing a server for Post-Quantum/Hybrid key exchange group support in TLS 1.3.
 
