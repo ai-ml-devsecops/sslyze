@@ -1,11 +1,11 @@
 from nassl.ephemeral_key_info import OpenSslGroupNameEnum
-
-from sslyze import ServerNetworkLocation
 from sslyze.plugins.pq_key_exchange_plugin import (
     PqKeyExchangeImplementation,
     PqKeyExchangeScanResult,
     PqKeyExchangeScanResultAsJson,
 )
+
+from sslyze import ServerNetworkLocation
 from sslyze.server_connectivity import TlsVersionEnum
 from tests.connectivity_utils import check_connectivity_to_server_and_return_info
 from tests.factories import ServerConnectivityInfoFactory, ServerTlsProbingResultFactory

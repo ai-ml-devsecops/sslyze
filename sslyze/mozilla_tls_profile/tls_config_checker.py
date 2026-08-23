@@ -118,8 +118,7 @@ SCAN_COMMANDS_NEEDED_BY_MOZILLA_CHECKER: set[ScanCommand] = {
     ScanCommand.TLS_COMPRESSION,
     ScanCommand.SESSION_RENEGOTIATION,
     ScanCommand.CERTIFICATE_INFO,
-    ScanCommand.ELLIPTIC_CURVES,
-    ScanCommand.PQ_KEY_EXCHANGE,  # Not really needed atm, but we should run this by default
+    ScanCommand.SUPPORTED_GROUPS,
     ScanCommand.TLS_EXTENDED_MASTER_SECRET,
     # ScanCommand.HTTP_HEADERS,  # Disabled for now; see below
 }
@@ -171,6 +170,7 @@ def check_server_against_tls_configuration(
     all_issues.update(issues_with_tls_ciphers)
 
     # Checks on the TLS curves
+    # TODO
     assert server_scan_result.scan_result.elliptic_curves.result
     issues_with_tls_curves = _check_tls_curves(
         server_scan_result.scan_result.elliptic_curves.result,
