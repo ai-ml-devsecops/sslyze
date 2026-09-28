@@ -1,0 +1,13 @@
+FROM python:3.12-alpine3.20 AS build
+WORKDIR /sslyze
+COPY . .
+# musllinux wheels cover nassl/cryptography for this image; uncomment if a wheel is ever missing:
+# RUN apk add --no-cache gcc musl-dev libffi-dev openssl-dev
+RUN pip install --no-cache-dir --prefix=/install .
+
+FROM python:3.12-alpine3.20
+COPY --from=build /install /usr/local
+RUN adduser -D -H -u 1001 -s /sbin/nologin sslyze
+USER sslyze
+ENTRYPOINT ["sslyze"]
+CMD ["-h"]

@@ -144,3 +144,27 @@ class TestMozillaTlsConfigurationChecker:
             check_server_against_tls_configuration(
                 server_scan_result=server_scan_result, tls_config_to_check_against=tls_config
             )
+
+    def test_non_compliant_exception_exposes_how_to_fix_guidance(self):
+        # Given a check that failed with the partial results needed to rebuild an exception
+        tls_config = MozillaTlsConfiguration.get(TlsConfigurationEnum.MOZILLA_INTERMEDIATE)
+        exception = ServerNotCompliantWithTlsConfiguration(
+            tls_configuration=tls_config,
+            issues={
+                "rsa_key_size": "RSA key size is 1024, minimum allowed is 2048.",
+                "tls_versions": "TLS versions {'TLSv1.0'} are supported, but should be rejected.",
+                "tls_vulnerability_heartbleed": "Server is vulnerable to the OpenSSL Heartbleed attack.",
+                "some_future_criteria": "Unknown criteria.",
+            },
+        )
+
+        # When accessing the remediation guidance
+        how_to_fix = exception.how_to_fix
+
+        # Then a remediation message is provided for every reported issue
+        assert set(how_to_fix.keys()) == set(exception.issues.keys())
+        # Targeted guidance is provided for known criteria
+        assert "2048" in how_to_fix["rsa_key_size"]
+        assert "Heartbleed" in how_to_fix["tls_vulnerability_heartbleed"]
+        # Unknown criteria fall back to a generic message so the output stays complete
+        assert "https://ssl-config.mozilla.org/" in how_to_fix["some_future_criteria"]

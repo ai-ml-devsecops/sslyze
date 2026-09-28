@@ -131,6 +131,7 @@ def main() -> None:
                 print(f"    {server_scan_result.server_location.display_string}: FAILED - Not compliant.")
                 for criteria, error_description in e.issues.items():
                     print(f"        * {criteria}: {error_description}")
+                    print(f"            How to fix: {e.how_to_fix[criteria]}")
                 print()
 
             except ServerScanResultIncomplete:
