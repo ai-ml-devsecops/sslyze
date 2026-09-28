@@ -1,0 +1,12 @@
+FROM python:3.12-alpine AS build
+COPY . /sslyze/
+WORKDIR /sslyze
+RUN pip install --no-cache-dir .
+#second part added later when committed logging changes werent taking effect:
+FROM python:3.12-alpine
+COPY --from=build /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
+COPY --from=build /usr/local/bin/sslyze /usr/local/bin/sslyze
+RUN adduser --no-create-home --disabled-password --gecos "" --uid 1001 sslyze
+USER sslyze
+ENTRYPOINT ["sslyze"]
+CMD ["-h"]

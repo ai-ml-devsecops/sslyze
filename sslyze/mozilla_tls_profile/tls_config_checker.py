@@ -1,7 +1,7 @@
 import json
 from enum import Enum
 from pathlib import Path
-from typing import Annotated, Optional, Set, Dict
+from typing import Annotated, Callable, Optional, Set, Dict
 
 import pydantic
 from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePublicKey
@@ -96,12 +96,117 @@ class ServerNotCompliantWithTlsConfiguration(Exception):
         self.tls_configuration = tls_configuration
         self.issues = issues
 
+    @property
+    def how_to_fix(self) -> Dict[str, str]:
+        """Remediation guidance for each compliance issue, keyed by the same criteria name as `issues`."""
+        return _get_how_to_fix_for_issues(issues=self.issues, tls_config=self.tls_configuration)
+
     def __str__(self) -> str:
         return f"Server is not compliant with the supplied TLS configuration due to: {self.issues}"
 
 
 class ServerScanResultIncomplete(Exception):
     """The server scan result does not have enough information to check it against Mozilla's configuration."""
+
+
+# Human-readable remediation guidance for each compliance criteria, used to tell the user how to fix non-compliance
+_CRITERIA_TO_HOW_TO_FIX: Dict[str, Callable[[TlsConfigurationAsJson], str]] = {
+    # Certificate issues
+    "certificate_path_validation": lambda tls_config: (
+        "Install a trusted certificate chain: the leaf certificate must chain up to a certificate included in "
+        "the trust stores of the clients, for example a certificate issued by a publicly-trusted CA."
+    ),
+    "certificate_curves": lambda tls_config: (
+        "Re-issue the certificate so that its EC public key uses one of the allowed curves: "
+        f"{', '.join(sorted(tls_config.certificate_curves))}."
+    ),
+    "rsa_key_size": lambda tls_config: (
+        f"Re-issue the certificate with an RSA key of at least {tls_config.rsa_key_size} bits."
+    ),
+    "maximum_certificate_lifespan": lambda tls_config: (
+        f"Re-issue the certificate so its validity period is shorter than {tls_config.maximum_certificate_lifespan} "
+        "days, and set up automated renewal (for example with ACME / certbot)."
+    ),
+    "certificate_types": lambda tls_config: (
+        f"Deploy at least one certificate using one of the allowed key types: "
+        f"{', '.join(sorted(tls_config.certificate_types))}."
+    ),
+    "certificate_signatures": lambda tls_config: (
+        f"Re-issue the certificate so that its signature algorithm is one of: "
+        f"{', '.join(sorted(tls_config.certificate_signatures))}."
+    ),
+    # TLS versions, cipher suites and parameters
+    "tls_versions": lambda tls_config: (
+        f"Keep only the following TLS versions enabled on the server: "
+        f"{', '.join(sorted(tls_config.tls_versions))}. Disable all the others, for example by updating the "
+        "protocol directives in the web server and OpenSSL configuration."
+    ),
+    "ciphersuites": lambda tls_config: (
+        "Restrict the TLS 1.3 cipher suites that the server accepts to the required ones, for example by only "
+        "enabling the recommended cipher suites from the Mozilla configuration."
+    ),
+    "ciphers": lambda tls_config: (
+        "Restrict the cipher suites that the server accepts to the required ones, for example by only enabling "
+        "the recommended cipher suites from the Mozilla configuration."
+    ),
+    "tls_curves": lambda tls_config: (
+        f"Restrict the TLS curves supported by the server to: {', '.join(sorted(tls_config.tls_curves))}."
+    ),
+    "ecdh_param_size": lambda tls_config: (
+        f"Increase the ECDH parameter size used by the server to at least {tls_config.ecdh_param_size} bits."
+    ),
+    "dh_param_size": lambda tls_config: (
+        f"Increase the DH parameter size used by the server to at least {tls_config.dh_param_size} bits, for example "
+        "by generating a new dhparam file with `openssl dhparam -out dhparams.pem <size>` and referencing it in the "
+        "server configuration."
+    ),
+    # TLS vulnerabilities
+    "tls_vulnerability_compression": lambda tls_config: (
+        "Disable TLS compression on the server and in the OpenSSL configuration, to mitigate CRIME-like attacks."
+    ),
+    "tls_vulnerability_ccs_injection": lambda tls_config: (
+        "Upgrade OpenSSL on the server to a version that fixes the CCS injection attack (1.0.1g or newer)."
+    ),
+    "tls_vulnerability_fallback_scsv": lambda tls_config: (
+        "Enable the TLS_FALLBACK_SCSV mechanism so the server can signal protocol version downgrades, for example "
+        "by keeping the TLS libraries used by the server up to date."
+    ),
+    "tls_vulnerability_heartbleed": lambda tls_config: (
+        "Upgrade OpenSSL on the server to a version that fixes the Heartbleed attack (1.0.1g or newer)."
+    ),
+    "tls_vulnerability_robot": lambda tls_config: (
+        "Disable the RSA key exchange cipher suites on the server to mitigate the ROBOT / Bleichenbacher oracle attack."
+    ),
+    "tls_vulnerability_renegotiation": lambda tls_config: (
+        "Configure the server to require secure renegotiation (RFC 5746), for example by updating the web server "
+        "and OpenSSL configuration."
+    ),
+    "tls_vulnerability_extended_master_secret": lambda tls_config: (
+        "Enable the Extended Master Secret TLS extension (RFC 7627) on the server."
+    ),
+    # HTTP headers
+    "hsts_min_age": lambda tls_config: (
+        f"Configure the server to send a Strict-Transport-Security response header with a max-age of at least "
+        f"{tls_config.hsts_min_age} seconds."
+    ),
+}
+
+
+def _get_how_to_fix_for_issues(
+    issues: Dict[str, str],
+    tls_config: TlsConfigurationAsJson,
+) -> Dict[str, str]:
+    how_to_fix: Dict[str, str] = {}
+    for criteria in issues:
+        criteria_how_to_fix = _CRITERIA_TO_HOW_TO_FIX.get(criteria)
+        if criteria_how_to_fix is None:
+            how_to_fix[criteria] = (
+                "No remediation guide is available for this criteria; review the server configuration and the "
+                "Mozilla TLS configuration at https://ssl-config.mozilla.org/."
+            )
+        else:
+            how_to_fix[criteria] = criteria_how_to_fix(tls_config)
+    return how_to_fix
 
 
 SCAN_COMMANDS_NEEDED_BY_MOZILLA_CHECKER: Set[ScanCommand] = {
