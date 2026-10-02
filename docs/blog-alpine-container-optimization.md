@@ -12,9 +12,8 @@ Alpine-based Dockerfile, then built and tested our own image. `hysnsec/sslyze` w
 prebuilt lab reference and later as a CI comparison; it was not used as the base image or source
 for `flex4lease/sslyze`.
 
-The challenge working branch used for this walkthrough is
-`codespace-shiny-space-enigma-5vvgpx5v67pc9qg` in the
-[working repository](https://github.com/ai-ml-devsecops/sslyze/tree/codespace-shiny-space-enigma-5vvgpx5v67pc9qg).
+The Codespaces challenge branch is not behind the official project's [`release` branch](https://github.com/nabla-c0d3/sslyze/tree/release); there are no new commits to fetch. The Debian-slim and Alpine sizes below are builds from this same challenge checkout. We did not build from or benchmark the official published
+`nablac0d3/sslyze` Docker image.
 
 ## Why teams often avoid Alpine for tools like sslyze
 
@@ -49,11 +48,10 @@ independently with `curl -sv https://scanme.nmap.org/` → connection refused. T
 serve HTTPS on 443 at all (it's an Nmap HTTP/SSH test target, not a TLS one). Switched to
 `badssl.com`, a host built specifically for TLS testing, and the scan completed normally.
 
-## Confirming a code change shipped and knowing when it activates
+## When remediation guidance appears
 
-Commit `5eac10f` added a `how_to_fix` remediation lookup and a print statement in `__main__.py`.
-They run when SSLyze checks scan results against a TLS profile. With no scan commands explicitly
-selected, SSLyze enables the Mozilla intermediate profile by default. If you explicitly select
+The remediation lookup runs when SSLyze checks scan results against a TLS profile. With no scan
+commands explicitly selected, SSLyze enables the Mozilla intermediate profile by default. If you explicitly select
 scan commands and also want the compliance check, request the profile with `--mozilla_config`:
 
 ```bash
@@ -66,9 +64,9 @@ that is a command-selection behavior, not a missing feature in the image.
 
 ## Tightening the Alpine build
 
-The original `Dockerfile.alpine-build` copied the entire `site-packages` directory from the build
-stage into the runtime stage, which drags along `pip`, `setuptools`, `wheel`, and build metadata
-that add nothing at runtime. Installing to an isolated prefix and copying only that avoids it:
+The initial `Dockerfile.alpine-build` copied all of `site-packages`; installing to an isolated
+prefix and copying that into the runtime image avoids carrying `pip`, `setuptools`, `wheel`, and
+build metadata that are not needed at runtime.
 
 ```dockerfile
 FROM python:3.12-alpine3.20 AS build

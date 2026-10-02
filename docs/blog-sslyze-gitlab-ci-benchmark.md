@@ -4,11 +4,11 @@ The Practical DevSecOps challenge starts from a pipeline that pulls the prebuilt
 
 ## Why use the Alpine image?
 
-The published Alpine image is 86.1 MB, compared with 177 MB for the Debian-slim build from the same SSLyze source, a reduction of about 51%. The multi-stage build installs the Python package into a dedicated prefix and copies only that installation into the runtime image. It does not carry the build-stage compiler toolchain into the final image.
+The published Alpine image is 86.1 MB, compared with 177 MB for the Debian-slim build from the same challenge checkout of SSLyze 6.3.1, a reduction of about 51%. The Codespaces branch is not behind upstream `release`; there are no new commits to fetch. The multi-stage build installs the Python package into a dedicated prefix and copies only that installation into the runtime image. It does not carry the build-stage compiler toolchain into the final image.
 
 A smaller runtime package inventory means fewer inherited OS packages to maintain and can reduce the image's potential attack surface. Image size alone does not prove that an image has fewer vulnerabilities or is safer, so scan images with the same vulnerability database and tools before making that claim. The benchmark below compares pull and scan duration; it is not a CVE scan.
 
-The `latest` tag was pulled back from Docker Hub and verified against the local build. The image ID was `786faf07b33027359ff0854a9f6ae99572afb862fdc3215f41a52b69b38dbbb2`.
+The `latest` tag was pulled back from Docker Hub and verified against the local build. The image ID was `786faf07b33027359ff0854a9f6ae99572afb862fdc3215f41a52b69b38dbbb2`. This comparison does not include the official published `nablac0d3/sslyze` Docker image; the CI comparator is Hysnsec's lab image.
 
 The build shown here used `python:3.12-alpine3.20`. Alpine 3.20's normal support period ended on April 1, 2026, according to the [official Alpine release table](https://alpinelinux.org/releases/). For a maintained deployment, update both build stages to a currently supported Python 3.12 Alpine tag, then rebuild and rerun the checks. This is a post-challenge maintenance recommendation: the task requires an Alpine base, not this specific Alpine release. A supported base is a better starting point for receiving OS fixes, but vulnerability scanning is still needed to assess the resulting image.
 
@@ -68,7 +68,7 @@ The image name is kept consistent in each pull, run, and CSV label so the artifa
 
 ## Results
 
-Pipeline [#2906554701](https://gitlab.com/flex4lease/sslyze-pipeline/-/pipelines/2906554701) passed on commit `0fbacb90`. In its single run, the benchmark recorded:
+Pipeline [#2906554701](https://gitlab.com/flex4lease/sslyze-pipeline/-/pipelines/2906554701) passed. In its single run, the benchmark recorded:
 
 | Image | Operation | Time |
 |---|---|---:|
