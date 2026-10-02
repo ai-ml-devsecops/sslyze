@@ -2,11 +2,19 @@
 
 ## What we did
 
-Built `sslyze` (a TLS/SSL scanner) from a feature branch into a container image, validated it
-against a live target, confirmed a specific commit's behavior, and compared the repo's stock
-`Dockerfile` (Debian-slim) against an Alpine-based build — then tightened the Alpine build further.
+The Practical DevSecOps challenge starts with a pipeline that pulls the prebuilt
+`hysnsec/sslyze` image. Its task is to read the SSLyze documentation, write a Dockerfile based on
+Alpine, and run your own image in CI.
 
-Repo: `https://github.com/ai-ml-devsecops/sslyze`, branch `codespace-shiny-space-enigma-5vvgpx5v67pc9qg`
+The source project is the official [nabla-c0d3/sslyze repository](https://github.com/nabla-c0d3/sslyze).
+In the challenge working copy, we added custom `How to fix:` remediation logging and an
+Alpine-based Dockerfile, then built and tested our own image. `hysnsec/sslyze` was used as the
+prebuilt lab reference and later as a CI comparison; it was not used as the base image or source
+for `flex4lease/sslyze`.
+
+The challenge working branch used for this walkthrough is
+`codespace-shiny-space-enigma-5vvgpx5v67pc9qg` in the
+[working repository](https://github.com/ai-ml-devsecops/sslyze/tree/codespace-shiny-space-enigma-5vvgpx5v67pc9qg).
 
 ## Why teams often avoid Alpine for tools like sslyze
 
@@ -44,15 +52,17 @@ serve HTTPS on 443 at all (it's an Nmap HTTP/SSH test target, not a TLS one). Sw
 ## Confirming a code change shipped and knowing when it activates
 
 Commit `5eac10f` added a `how_to_fix` remediation lookup and a print statement in `__main__.py`.
-Both are present in the built image, but only execute when the Mozilla compliance check is
-explicitly enabled:
+They run when SSLyze checks scan results against a TLS profile. With no scan commands explicitly
+selected, SSLyze enables the Mozilla intermediate profile by default. If you explicitly select
+scan commands and also want the compliance check, request the profile with `--mozilla_config`:
 
 ```bash
 podman run --rm sslyze:alpine-build --mozilla_config=intermediate badssl.com
 ```
 
-Without `--mozilla_config` or `--custom_tls_config`, that whole branch is skipped and prints
-"Disabled" — not a build issue, just an opt-in feature flag.
+To disable the default profile check, pass `--mozilla_config=disable`. If you explicitly enable
+individual scan commands without selecting a TLS profile, the compliance section is disabled;
+that is a command-selection behavior, not a missing feature in the image.
 
 ## Tightening the Alpine build
 
@@ -79,6 +89,16 @@ no password, fixed UID, no login shell) — functionally equivalent to the long-
 matches what's actually documented for Alpine's `adduser`.
 
 This is now the content of `Dockerfile.alpine-build` in the repo.
+
+## Keeping the Alpine base current
+
+The image and benchmark in this walkthrough were built from `python:3.12-alpine3.20`. Alpine
+3.20's normal support period ended on April 1, 2026, according to the [official Alpine release
+table](https://alpinelinux.org/releases/). The challenge requirement is to use Alpine;
+it does not require staying on this release. For ongoing use, move both Dockerfile stages to a
+currently supported Python 3.12 Alpine tag, rebuild, and rerun the functional and CI checks. A
+supported base improves the chance of receiving OS security fixes, but it does not by itself
+prove the finished image is vulnerability-free.
 
 ## Final size comparison
 
@@ -124,6 +144,9 @@ This catches issues that a local `build`+`run` won't: registry auth/config probl
 git clone --branch codespace-shiny-space-enigma-5vvgpx5v67pc9qg \
   https://github.com/ai-ml-devsecops/sslyze.git
 cd sslyze
+
+# This challenge working copy is based on the official nabla-c0d3/sslyze project.
+# It contains the custom remediation change and Alpine Dockerfile used below.
 
 podman build -f Dockerfile.alpine-build -t sslyze:alpine-build .
 podman build -f Dockerfile -t sslyze:slim-build .
