@@ -8,7 +8,7 @@ The resulting Alpine image was 86.1 MB, compared with 177 MB for the Debian-slim
 
 Alpine uses musl rather than glibc. Python packages with C extensions need compatible `musllinux` wheels or a source build with a compiler toolchain. That can make Debian-slim the safer default for tools with crypto dependencies, including SSLyze's `nassl` binding.
 
-For this build, on Python 3.12 and linux-x86_64, `nassl` and `cryptography` installed from musllinux wheels. No compiler or Alpine build dependencies were needed. Check wheel availability again before adopting Alpine on another architecture or Python version.
+For this build, on Python 3.12 and `linux-x86_64`, `nassl` and `cryptography` installed from musllinux wheels. No compiler or Alpine build dependencies were needed. Check wheel availability again before adopting Alpine on another architecture or Python version.
 
 Use a currently supported Alpine Python tag for ongoing deployment. This example used `python:3.12-alpine3.20`, whose normal support period ended April 1, 2026 according to Alpine's [release table](https://alpinelinux.org/releases/). Updating the base and rebuilding improves access to OS fixes, but does not establish that the completed image is vulnerability-free.
 
@@ -42,7 +42,7 @@ podman run --rm --entrypoint id sslyze:alpine-build
 podman run --rm sslyze:alpine-build badssl.com
 ```
 
-Use a host that actually serves TLS. `scanme.nmap.org` rejected the TLS connection in our test, while `badssl.com` completed normally. `badssl.com` is intentionally built for TLS testing.[^badssl]
+Use a host that actually serves TLS. `scanme.nmap.org` rejected the TLS connection in our test, while `badssl.com` completed normally. `badssl.com` is intentionally built for TLS testing.[1]
 
 By default, SSLyze runs the Mozilla intermediate compliance check when no scan commands are selected. If selecting commands explicitly, add the profile to retain that check:
 
@@ -67,4 +67,4 @@ podman rm -f registry
 
 The test verifies that the image can be pulled and run without relying on the local build cache. The next step is to run the image in CI and retain the benchmark output as an artifact.
 
-[^badssl]: `badssl.com` is an intentionally misconfigured test target for TLS tooling.
+[1]: `badssl.com` is an intentionally misconfigured test target for TLS tooling.
